@@ -58,28 +58,38 @@
 */
 
 ///////// CONFIGURATION ///////// 
+
+// Node 
+#define NODE_NAME "radiator-wk-achter"
+#define SLAVE_MODE 0 // use control input from other node
+#define MASTER_NODE_NAME "radiator-wk-achter" // node name of master
+
 // WiFi
 #define WIFI_SSID "WIFI_SSID"
-#define WIFI_PASSWORD "WIFI_PASSWD"
+#define WIFI_PASSWORD "WIFI_PASSWORD"
 
 // MQTT
 #define MQTTSERVER "192.168.1.11"
 #define MQTT_USERNAME "" // leave empty if no credentials are needed
 #define MQTT_PASSWORD "" 
-#define NODE_NAME "radiator-wk-voor"
-
-// operating mode
-#define SLAVE_MODE 1 // use control input from other node
-#define MASTER_NODE_NAME "radiator-wk-achter" // node name of master
 
 // fan speed controller tuning
+// (heating)
 #define FAN_CONTROL_START 30 // degrees C inlet temperature (start of control range, duty cycle = 0 %)
 #define FAN_CONTROL_FULL 45 // degrees C inlet temperature (end of control range, duty cycle = limit %)
 #define FAN_DUTYCYCLE_LIMIT 60 // max fan speed in normal mode
 #define FAN_DUTYCYCLE_BOOST_LIMIT 100 // max fan speed in boost mode
+
 #define FAN_ENABLE_T_OFF 27.5 // temperature below which to disable fans
 #define FAN_ENABLE_DELTA_T_ON 5.0 // delta inlet-ambient to turn on fans
 #define FAN_ENABLE_DELTA_T_OFF 4.0 // delta inlet-ambient to turn off fans
+
+// fan speed controller tuning
+// (cooling)
+#define FAN_DUTYCYCLE_COOLING 40 // fan speed in cooling mode (cooling uses a constant fan speed)
+#define FAN_ENABLE_DELTA_T_ON_COOLING 2.0 // delta inlet-ambient to turn on fans for cooling
+#define FAN_ENABLE_DELTA_T_OFF_COOLING 1.5 // delta inlet-ambient to turn off fans for cooling
+
 
 // NTC
 #define NTC_BETA 3950
@@ -294,27 +304,43 @@ void handleControl(void) {
     if (SLAVE_MODE == 0){
       if (fan_controlmode == 0){
         // automatic fan speed and automatic enable/disable
-        if ((T1 - T0 > FAN_ENABLE_DELTA_T_ON)) { // inlet higher than ambient, enable fans
-          fan_enable = 1;
-          fan_dutycycle = FAN_DUTYCYCLE_LIMIT * (T1 - FAN_CONTROL_START) / (FAN_CONTROL_FULL - FAN_CONTROL_START);
-  
-          switch (fan_speedmode) {
-            default:
-            case 0:
-              if (fan_dutycycle > FAN_DUTYCYCLE_LIMIT)
-                fan_dutycycle = FAN_DUTYCYCLE_LIMIT;
-              break;
-            case 1:
-              if (fan_dutycycle > FAN_DUTYCYCLE_BOOST_LIMIT)
-                fan_dutycycle = FAN_DUTYCYCLE_BOOST_LIMIT;
-              break;
+
+        if(T0 > T1){ // we could be cooling
+        
+          if (T0 - T1 > FAN_ENABLE_DELTA_T_ON_COOLING) { // inlet lower than ambient, enable fans for cooling
+            fan_enable = 1;
+            fan_dutycycle = FAN_DUTYCYCLE_COOLING;
+            
+          } else if (T0 - T1 < FAN_ENABLE_DELTA_T_OFF_COOLING) { // inlet higher than ambient, disable fans for cooling cooling
+            fan_enable = 0;
+            fan_dutycycle = 0;
+            
           }
-  
-        } else if ((T1 - T0 < FAN_ENABLE_DELTA_T_OFF) || (T1 < FAN_ENABLE_T_OFF)) { // inlet temp is too low, disable fans
-          fan_enable = 0;
-          fan_dutycycle = 0;
+          
+        }else{ // we could be heating
+
+          if (T1 - T0 > FAN_ENABLE_DELTA_T_ON) { // inlet higher than ambient, enable fans
+            fan_enable = 1;
+            fan_dutycycle = FAN_DUTYCYCLE_LIMIT * (T1 - FAN_CONTROL_START) / (FAN_CONTROL_FULL - FAN_CONTROL_START);
+    
+            switch (fan_speedmode) {
+              default:
+              case 0:
+                if (fan_dutycycle > FAN_DUTYCYCLE_LIMIT)
+                  fan_dutycycle = FAN_DUTYCYCLE_LIMIT;
+                break;
+              case 1:
+                if (fan_dutycycle > FAN_DUTYCYCLE_BOOST_LIMIT)
+                  fan_dutycycle = FAN_DUTYCYCLE_BOOST_LIMIT;
+                break;
+            }
+    
+          } else if ((T1 - T0 < FAN_ENABLE_DELTA_T_OFF) || (T1 < FAN_ENABLE_T_OFF)) { // inlet temp is too low, disable fans
+            fan_enable = 0;
+            fan_dutycycle = 0;
+          }
         }
-  
+        
       } else {
         // manual fan speed control
         if(fan_dutycycle > 0){
@@ -407,6 +433,7 @@ void MQTTconnect(void) {
     }
   }
 }
+
 
 void handleMQTTreceive(String &topic, String &payload) {
 
