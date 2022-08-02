@@ -28,21 +28,21 @@ Montage
 
 1. Plaats rubber tochtstrip (zoals deze: https://www.hornbach.nl/shop/ELLEN-Tochtstrip-siliconen-universeel-wit-6-m/7571056/artikel.html) onder de ventilatoren ter demping van vibraties. Zorg ervoor dat de pijl voor de luchtstroming aan de zijkant van de ventilator omhoog wijst, plaats de rubber tochtstrip dan aan de onderzijde.
 
-![](<https://raw.githubusercontent.com/BeaverUI/ESPJagaBooster/main/images/fan_suspension.jpg>)
+![](<https://raw.githubusercontent.com/BeaverUI/ESPJagaBooster/main/images/fan_suspension.jpg?>)
 
 2. Plaats de fans op de convector, laat de kabels richting de kappen van de Jaga wijzen. Let erop dat de luchtstroming opwaarts dient te zijn.
 3. Gebruik tiewraps en 4-pin fan verlengkabels om de bedrading netjes in de kap weg te werken.
 
-![](<https://raw.githubusercontent.com/BeaverUI/ESPJagaBooster/main/images/fan_mounting_1.jpg>)
-![](<https://raw.githubusercontent.com/BeaverUI/ESPJagaBooster/main/images/fan_mounting_2.jpg>)
-![](<https://raw.githubusercontent.com/BeaverUI/ESPJagaBooster/main/images/extension_cable.jpg>)
+![](<https://raw.githubusercontent.com/BeaverUI/ESPJagaBooster/main/images/fan_mounting_1.jpg?>)
+![](<https://raw.githubusercontent.com/BeaverUI/ESPJagaBooster/main/images/fan_mounting_2.jpg?>)
+![](<https://raw.githubusercontent.com/BeaverUI/ESPJagaBooster/main/images/extension_cable.jpg?>)
 
 
 4. Plak tochtstrip op de onderzijde van de module zodat de pinnen geen contact maken met de radiatorbehuizing.
 5. Monteer de besturingsmodule aan de zijde van de thermostaatknop (buiten de luchtstroming), gebruik een tiewrap om de module vast te maken.
 
-![](<https://raw.githubusercontent.com/BeaverUI/ESPJagaBooster/main/images/module_mounting.jpg>)
-![](<https://raw.githubusercontent.com/BeaverUI/ESPJagaBooster/main/images/system_overview.jpg>)
+![](<https://raw.githubusercontent.com/BeaverUI/ESPJagaBooster/main/images/module_mounting.jpg?>)
+![](<https://raw.githubusercontent.com/BeaverUI/ESPJagaBooster/main/images/system_overview.jpg?>)
 
 6. Sluit de fans aan op de module.
 7. Sluit de temperatuursensoren aan op de module.
