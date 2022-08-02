@@ -41,6 +41,7 @@ Montage
 4. Plak tochtstrip op de onderzijde van de module zodat de pinnen geen contact maken met de radiatorbehuizing.
 5. Monteer de besturingsmodule aan de zijde van de thermostaatknop (buiten de luchtstroming), gebruik een tiewrap om de module vast te maken.
 
+![](<https://raw.githubusercontent.com/BeaverUI/ESPJagaBooster/main/images/module_mounting.jpg>)
 ![](<https://raw.githubusercontent.com/BeaverUI/ESPJagaBooster/main/images/system_overview.jpg>)
 
 6. Sluit de fans aan op de module.
