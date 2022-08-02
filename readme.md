@@ -26,7 +26,7 @@ Optioneel, om de "smart home" functies te gebruiken:
 Montage
 ----------------
 
-1. Plaats rubber tochtstrip onder de ventilatoren ter demping van vibraties. Zorg ervoor dat de pijl voor de luchtstroming aan de zijkant van de ventilator omhoog wijst, plaats de rubber tochtstrip dan aan de onderzijde.
+1. Plaats rubber tochtstrip (zoals deze: https://www.hornbach.nl/shop/ELLEN-Tochtstrip-siliconen-universeel-wit-6-m/7571056/artikel.html) onder de ventilatoren ter demping van vibraties. Zorg ervoor dat de pijl voor de luchtstroming aan de zijkant van de ventilator omhoog wijst, plaats de rubber tochtstrip dan aan de onderzijde.
 2. Plaats de fans op de convector, laat de kabels richting de kappen van de Jaga wijzen. Let erop dat de luchtstroming opwaarts dient te zijn.
 3. Gebruik tiewraps en 4-pin fan verlengkabels om de bedrading netjes in de kap weg te werken.
 4. Plak tochtstrip op de onderzijde van de module zodat de pinnen geen contact maken met de radiatorbehuizing.
