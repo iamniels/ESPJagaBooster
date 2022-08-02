@@ -2,7 +2,7 @@
    Radiator fan controller via MQTT
    Bas Vermulst
 
-   Controller software for fan-boosed convection radiators.
+   Controller software for fan-boosted convection radiators.
 
    === configuring ===
    Using the #define parameters in the CONFIGURATION section, do the following:
