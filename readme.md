@@ -46,6 +46,7 @@ Montage
 
 6. Sluit de fans aan op de module.
 7. Sluit de temperatuursensoren aan op de module.
+
 CN0 = omgevingslucht, deze moet vrij hangen onder de radiator
 CN1 = aanvoer, trek de temperatuursensor met een tiewrap strak tegen de aanvoer-waterleiding
 CN2 = retour, trek ook deze met een tiewrap strak tegen de retour-waterleiding
