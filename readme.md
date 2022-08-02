@@ -12,7 +12,7 @@ Beknopte handleiding
 Benodigdheden:
 ----------------
 
-1. Bijbehorende module. Voor de Nederlanders zijn bijpassende modules hier verkrijgbaar: https://link.marktplaats.nl/m1835146404
+1. Bijbehorende module.
 2. Micro-USB kabel tbv eerste keer programmeren van module. Alle opvolgende keren kan de module "over the air" geprogrammeerd worden indien gebruik gemaakt wordt van WiFi-integratie door in de Arduino IDE de netwerkpoort met de nodenaam te selecteren.
 3. Laptop met Arduino IDE geinstalleerd. Bovenaan de programmacode (ESPJagaBooster.ino op deze pagina) tref je de benodigde libraries en instellingen.
 4. Ventilatoren met 4 pinnen (PWM-gestuurd), zoals bijvoorbeeld de Arctic P14 PWM PST fans.
