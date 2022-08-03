@@ -40,7 +40,7 @@ Montage
 
 4. Plak tochtstrip op de onderzijde van de module zodat de pinnen geen contact maken met de radiatorbehuizing.
 5. Monteer de besturingsmodule aan de zijde van de thermostaatknop (buiten de luchtstroming), gebruik een tiewrap om de module vast te maken.
-
+Let op: de WiFi ontvangst wordt beinvloed door het metaal in de radiator. Zorg ervoor dat de antenne niet te dicht tegen de metalen beplating zit om het ontvangst te optimaliseren. Wanneer de module draait kan de RSSI gecontroleerd worden via MQTT, deze dient boven de -80 dB te liggen voor een betrouwbare werking.
 ![](<https://raw.githubusercontent.com/BeaverUI/ESPJagaBooster/main/images/module_mounting.jpg?>)
 
 6. Sluit de fans aan op de module.
