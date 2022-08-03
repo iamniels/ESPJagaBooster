@@ -1,9 +1,19 @@
 /*
-   Radiator fan controller via MQTT
-   Bas Vermulst
+   Software for controlling fan-boosted radiators
+   by Bas Vermulst
+   
+   Module hardware available upon request
 
-   Controller software for fan-boosted convection radiators.
+   == some remarks ==
+   Temperature sensor connections are as follows:
+    CN0 = ambient, leave floating just below the radiator
+    CN1 = inlet, mount tightly to inlet water piping
+    CN2 = outlet, mount tightly to outlet water piping
 
+   Mounting the module against metal radiator plating reduces WiFi reception!
+   If reception is poor (RSSI < -80 dB), consider relocating the module.
+   
+   
    === configuring ===
    Using the #define parameters in the CONFIGURATION section, do the following:
    1) configure WiFi via WIFI_SSID and WIFI_PASSWORD
@@ -17,11 +27,14 @@
    === compiling ===
    1) Add D1 mini to the board manager:
    File --> Preferences, add to board manager URLs: http://arduino.esp8266.com/stable/package_esp8266com_index.json
+   
+   Then:
+   Tools -> Board --> Boards manager --> Install "esp8266" board library.
 
-   2) Install required libraries:
+   2) Install required software libraries:
    - Adafruit ADS1X15 (by Adafruit)
    - MQTT (by Joel Gaehwiler)
-   - ArduinoOTA (by Arduino)
+   - ArduinoOTA (by Juraj Andrassy/Arduino)
    Install via "Manage Libraries..." under Tools.
 
    3) Configure board:
@@ -33,9 +46,9 @@
 
    === usage ===
    you can send the following commands to the board via MQTT:
-    - NODE_NAME/fan-speedmode-ref: 0 = silent mode, 1 = boost mode
-    - NODE_NAME/fan-controlmode-ref: 0 = automatic fan speed, 1 = manual fan speed
-    - NODE_NAME/fan-dutycycle-ref: value between 0 - 100 to control fan speed (only in manual fan speed)
+      - NODE_NAME/fan-speedmode-ref: 0 = silent mode, 1 = boost mode
+      - NODE_NAME/fan-controlmode-ref: 0 = automatic fan speed, 1 = manual fan speed
+      - NODE_NAME/fan-dutycycle-ref: value between 0 - 100 to control fan speed (only in manual fan speed)
 
    the board sends the following status messages via MQTT:
       - NODE_NAME/ip: ip-address
@@ -59,10 +72,11 @@
 
 ///////// CONFIGURATION ///////// 
 
-// Node 
-#define NODE_NAME "radiator-wk-achter"
-#define SLAVE_MODE 0 // use control input from other node
-#define MASTER_NODE_NAME "radiator-wk-achter" // node name of master
+// Node
+#define NODE_NAME "radiator-hal"
+#define STANDALONE_MODE 0 // if set to 1, the board runs without WiFi and MQTT
+#define SLAVE_MODE 0 // use control input from other node (only works if STANDALONE_MODE == 0)
+#define MASTER_NODE_NAME "" // node name of master
 
 // WiFi
 #define WIFI_SSID "WIFI_SSID"
@@ -75,8 +89,8 @@
 
 // fan speed controller tuning
 // (heating)
-#define FAN_CONTROL_START 30 // degrees C inlet temperature (start of control range, duty cycle = 0 %)
-#define FAN_CONTROL_FULL 45 // degrees C inlet temperature (end of control range, duty cycle = limit %)
+#define FAN_CONTROL_START 27.5 // degrees C inlet temperature (start of control range, duty cycle = 0 %)
+#define FAN_CONTROL_FULL 45.0 // degrees C inlet temperature (end of control range, duty cycle = limit %)
 #define FAN_DUTYCYCLE_LIMIT 60 // max fan speed in normal mode
 #define FAN_DUTYCYCLE_BOOST_LIMIT 100 // max fan speed in boost mode
 
@@ -86,7 +100,7 @@
 
 // fan speed controller tuning
 // (cooling)
-#define FAN_DUTYCYCLE_COOLING 40 // fan speed in cooling mode (cooling uses a constant fan speed)
+#define FAN_DUTYCYCLE_COOLING 50 // fan speed in cooling mode (cooling uses a constant fan speed)
 #define FAN_ENABLE_DELTA_T_ON_COOLING 2.0 // delta inlet-ambient to turn on fans for cooling
 #define FAN_ENABLE_DELTA_T_OFF_COOLING 1.5 // delta inlet-ambient to turn off fans for cooling
 
@@ -107,15 +121,15 @@
 #include <Wire.h>
 #include <Adafruit_ADS1X15.h>
 
-// pheripherals and IO
+// peripherals and IO
 #define FAN_PIN D0
 #define PWR_SW_PIN D5
 #define V_BUS 3.3 // NTC resistor divider input voltage
 
 #define TEMPERATURE_FILTER_COEFF 0.2
+#define SUPPLY_FILTER_COEFF 0.1
 
 // initialization
-//int status = WL_IDLE_STATUS;
 WiFiClient wificlient_mqtt;
 MQTTClient mqttclient;
 Adafruit_ADS1115 ads;
@@ -138,67 +152,70 @@ int mqtt_interval = 5; //mqtt publishing interval in seconds
 void setup() {
   Serial.begin(115200);
 
-  // Start networking
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  // optional: fixed IP address, it is recommended to assign a fixed IP via the DHCP server instead
-  // IPAddress ip(192,168,1,31); IPAddress gateway(192,168,1,1); IPAddress subnet(255,255,0,0); WiFi.config(ip, gateway, subnet);
-  Serial.print("Attempting to connect to WiFi...");
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    delay(1000);
-  } Serial.println("");
-  Serial.println("Connected");
-  Serial.println("IP address: " + IPAddressString(WiFi.localIP()));
+  if(STANDALONE_MODE==false){
+    // Start networking
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    // optional: fixed IP address, it is recommended to assign a fixed IP via the DHCP server instead
+    // IPAddress ip(192,168,1,31); IPAddress gateway(192,168,1,1); IPAddress subnet(255,255,0,0); WiFi.config(ip, gateway, subnet);
+    Serial.print("Attempting to connect to WiFi...");
+    while (WiFi.status() != WL_CONNECTED) {
+      Serial.print(".");
+      delay(1000);
+    } Serial.println("");
+    Serial.println("Connected");
+    Serial.println("IP address: " + IPAddressString(WiFi.localIP()));
+  
+  
+    // Init OTA updates
+    ArduinoOTA.setPort(8266);    // Port defaults to 8266
+    ArduinoOTA.setHostname(NODE_NAME);  // Hostname defaults to esp8266-[ChipID]
+    // ArduinoOTA.setPassword("admin");
+    // Password can be set with it's md5 value as well
+    // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
+    // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
+  
+    ArduinoOTA.onStart([]() {
+      String type;
+      if (ArduinoOTA.getCommand() == U_FLASH) {
+        type = "sketch";
+      } else { // U_FS
+        type = "filesystem";
+      }
+  
+      // NOTE: if updating FS this would be the place to unmount FS using FS.end()
+      Serial.println("Start updating " + type);
+    });
+    ArduinoOTA.onEnd([]() {
+      Serial.println("\nEnd");
+    });
+    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+      Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+    });
+    ArduinoOTA.onError([](ota_error_t error) {
+      Serial.printf("Error[%u]: ", error);
+      if (error == OTA_AUTH_ERROR) {
+        Serial.println("Auth Failed");
+      } else if (error == OTA_BEGIN_ERROR) {
+        Serial.println("Begin Failed");
+      } else if (error == OTA_CONNECT_ERROR) {
+        Serial.println("Connect Failed");
+      } else if (error == OTA_RECEIVE_ERROR) {
+        Serial.println("Receive Failed");
+      } else if (error == OTA_END_ERROR) {
+        Serial.println("End Failed");
+      }
+    });
+    ArduinoOTA.begin();
+  
+  
+    // Start MQTT
+    mqttclient.begin(MQTTSERVER, wificlient_mqtt);
+    mqttclient.onMessage(handleMQTTreceive);
+    MQTTconnect();
+  }
 
-
-  // Init OTA updates
-  ArduinoOTA.setPort(8266);    // Port defaults to 8266
-  ArduinoOTA.setHostname(NODE_NAME);  // Hostname defaults to esp8266-[ChipID]
-  // ArduinoOTA.setPassword("admin");
-  // Password can be set with it's md5 value as well
-  // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
-  // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
-
-  ArduinoOTA.onStart([]() {
-    String type;
-    if (ArduinoOTA.getCommand() == U_FLASH) {
-      type = "sketch";
-    } else { // U_FS
-      type = "filesystem";
-    }
-
-    // NOTE: if updating FS this would be the place to unmount FS using FS.end()
-    Serial.println("Start updating " + type);
-  });
-  ArduinoOTA.onEnd([]() {
-    Serial.println("\nEnd");
-  });
-  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-  });
-  ArduinoOTA.onError([](ota_error_t error) {
-    Serial.printf("Error[%u]: ", error);
-    if (error == OTA_AUTH_ERROR) {
-      Serial.println("Auth Failed");
-    } else if (error == OTA_BEGIN_ERROR) {
-      Serial.println("Begin Failed");
-    } else if (error == OTA_CONNECT_ERROR) {
-      Serial.println("Connect Failed");
-    } else if (error == OTA_RECEIVE_ERROR) {
-      Serial.println("Receive Failed");
-    } else if (error == OTA_END_ERROR) {
-      Serial.println("End Failed");
-    }
-  });
-  ArduinoOTA.begin();
-
-
-  // Start MQTT
-  mqttclient.begin(MQTTSERVER, wificlient_mqtt);
-  mqttclient.onMessage(handleMQTTreceive);
-  MQTTconnect();
-
+  
   // init PWM
   analogWriteRange(100);
   analogWriteFreq(8000);
@@ -217,8 +234,12 @@ void setup() {
 // === Main stuff ====
 void loop() {
   static unsigned long prev_millis = 0;
-  ArduinoOTA.handle();
-  handleMQTT();
+  
+  if(STANDALONE_MODE==0){
+    ArduinoOTA.handle();
+    handleMQTT();
+  }
+  
   handleTemperature();
   handleControl();
 }
@@ -227,7 +248,7 @@ void loop() {
 void handleTemperature(void) {
   static unsigned long prev_millis = 0;
 
-  if (InterruptPending(&prev_millis, 50, 1)) {
+  if (InterruptPending(&prev_millis, 100, 1)) {
     int16_t adc0, adc1, adc2, adc3;
     float volts0, volts1, volts2, volts3;
     float R0, R1, R2;
@@ -241,9 +262,8 @@ void handleTemperature(void) {
     volts0 = ads.computeVolts(adc0);
     volts1 = ads.computeVolts(adc1);
     volts2 = ads.computeVolts(adc2);
-    volts3 = ads.computeVolts(adc3);
-
-    volts3*=2; // supply voltage
+    
+    volts3 = (1 - SUPPLY_FILTER_COEFF) * volts3 + SUPPLY_FILTER_COEFF * 2.0 * ads.computeVolts(adc3); // supply voltage (filtered)
 
     
     // R_ntc= R * (V_o/(V_i-V_o))
@@ -301,7 +321,7 @@ void handleControl(void) {
 
   if (InterruptPending(&prev_millis, 1000, 1)) {
     
-    if (SLAVE_MODE == 0){
+    if (SLAVE_MODE == 0 || STANDALONE_MODE == 1){
       if (fan_controlmode == 0){
         // automatic fan speed and automatic enable/disable
 
@@ -365,8 +385,12 @@ void handleControl(void) {
 // ===== Handles for MQTT =====
 // handle connection and send messages at intervals
 void handleMQTT(void) {
-  // handle connection and send messages at intervals
   static unsigned long prev_millis = 0;
+  
+  while (wificlient_mqtt.status() != WL_CONNECTED) {
+    Serial.println("WiFi is not available. Waiting for WiFi connection.");
+    delay(1000);
+  }
 
   if (!mqttclient.connected()) {
     MQTTconnect();
@@ -434,7 +458,7 @@ void MQTTconnect(void) {
   }
 }
 
-
+// handle received MQTT messages
 void handleMQTTreceive(String &topic, String &payload) {
 
   if(SLAVE_MODE == 0){
@@ -518,26 +542,10 @@ bool InterruptPending(unsigned long *prev_millis, unsigned int period, int mode)
   }
 }
 
-void MqttDebug(const char* msg) {
-  MqttDebug(String(msg));
-}
-
-void MqttDebug(String msg) {
-  if (mqttclient.connected()) {
-    mqttclient.publish(GetTopic("debug"), msg);
-  }
-}
-
 String GetTopic(String topic) {
   return String(NODE_NAME) + String("/") + String(topic);
 }
 
 String GetTopicMaster(String topic) {
   return String(MASTER_NODE_NAME) + String("/") + String(topic);
-}
-
-String Float2SciStr(float number, int digits) {
-  char char_buffer[40];
-  sprintf(char_buffer, "%.*E", digits, number);
-  return String(char_buffer);
 }
