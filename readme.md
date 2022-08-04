@@ -55,4 +55,5 @@ Let op: de WiFi ontvangst wordt beinvloed door het metaal in de radiator. Zorg e
 
 8. Sluit de +12V voeding aan op de module.
 9. Programmeer de module via de micro-USB kabel. Zie notities in de broncode voor meer informatie.
-10. Controleer de werking: check de temperaturen en RSSI (dient boven de -85 a -80 dB te liggen, of beter nog boven de -75 dB). Activeer de ventilatoren handmatig (fan_controlmode_ref = 1, fan_dutycycle_ref = 0 ... 100) en controleer of ze allemaal functioneren en netjes in snelheid geregeld worden.
+10. Controleer de werking: kijk via de Arduino IDE naar de Serial Monitor (onder Tools) om activiteit van de module te zien. Als deze goed functioneert moet er regelmatig "Sending MQTT update..." voorbij komen.
+11. Gebruik MQTT Explorer (https://github.com/thomasnordquist/MQTT-Explorer) om de berichten van de module te checken. Controleer met name de temperaturen en RSSI (dient boven de -85 a -80 dB te liggen, of beter nog boven de -75 dB). Activeer de ventilatoren handmatig (fan_controlmode_ref = 1, fan_dutycycle_ref = 0 ... 100) en controleer of ze allemaal functioneren en netjes in snelheid geregeld worden.
