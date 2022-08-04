@@ -244,13 +244,14 @@ void loop() {
   handleControl();
 }
 
+
 // handle temperature
 void handleTemperature(void) {
   static unsigned long prev_millis = 0;
 
   if (InterruptPending(&prev_millis, 100, 1)) {
     int16_t adc0, adc1, adc2, adc3;
-    float volts0, volts1, volts2, volts3;
+    float volts0, volts1, volts2; static float volts3=0.0;
     float R0, R1, R2;
     float steinhart;
 
@@ -262,9 +263,8 @@ void handleTemperature(void) {
     volts0 = ads.computeVolts(adc0);
     volts1 = ads.computeVolts(adc1);
     volts2 = ads.computeVolts(adc2);
-    
-    volts3 = (1 - SUPPLY_FILTER_COEFF) * volts3 + SUPPLY_FILTER_COEFF * 2.0 * ads.computeVolts(adc3); // supply voltage (filtered)
 
+    volts3 = (1 - SUPPLY_FILTER_COEFF) * volts3 + SUPPLY_FILTER_COEFF * (2 * ads.computeVolts(adc3)); // supply voltage (filtered)
     
     // R_ntc= R * (V_o/(V_i-V_o))
     R0 = 10.0e3 * (volts0 / (volts3 - volts0));
@@ -387,7 +387,7 @@ void handleControl(void) {
 void handleMQTT(void) {
   static unsigned long prev_millis = 0;
   
-  while (wificlient_mqtt.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi is not available. Waiting for WiFi connection.");
     delay(1000);
   }
