@@ -49,7 +49,9 @@ Let op: de WiFi ontvangst wordt beinvloed door het metaal in de radiator. Zorg e
 
  - CN0 = omgevingslucht, deze moet vrij hangen onder de radiator
  - CN1 = aanvoer, trek de temperatuursensor met een tiewrap strak tegen de aanvoer-waterleiding
- - CN2 = retour, trek ook deze met een tiewrap strak tegen de retour-waterleiding
+ - CN2 = retour, trek deze met een tiewrap strak tegen de retour-waterleiding
+ 
+ Eventueel kun je de temperatuursensoren die aan de leidingen getiewrapped zitten nog voorzien van wat katoentape ter isolatie van de omgevingslucht.
 
 8. Sluit de +12V voeding aan op de module.
 9. Programmeer de module via de micro-USB kabel. Zie notities in de broncode voor meer informatie.
