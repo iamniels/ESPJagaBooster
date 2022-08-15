@@ -1,8 +1,6 @@
 /*
-   Software for controlling fan-boosted radiators
+   Software for controlling fan-boosted radiators.
    by Bas Vermulst
-   
-   Module hardware available upon request
 
    == some remarks ==
    Temperature sensor connections are as follows:
@@ -73,10 +71,10 @@
 ///////// CONFIGURATION ///////// 
 
 // Node
-#define NODE_NAME "radiator-hal"
+#define NODE_NAME "radiator-wk-voor"
 #define STANDALONE_MODE 0 // if set to 1, the board runs without WiFi and MQTT
 #define SLAVE_MODE 0 // use control input from other node (only works if STANDALONE_MODE == 0)
-#define MASTER_NODE_NAME "" // node name of master
+#define MASTER_NODE_NAME "radiator-wk-voor" // node name of master (for slave mode)
 
 // WiFi
 #define WIFI_SSID "WIFI_SSID"
@@ -100,9 +98,11 @@
 
 // fan speed controller tuning
 // (cooling)
-#define FAN_DUTYCYCLE_COOLING 50 // fan speed in cooling mode (cooling uses a constant fan speed)
-#define FAN_ENABLE_DELTA_T_ON_COOLING 2.0 // delta inlet-ambient to turn on fans for cooling
+#define FAN_DUTYCYCLE_COOLING 55 // fan speed in cooling mode (cooling uses a constant fan speed)
+#define FAN_ENABLE_DELTA_T_ON_COOLING 2.5 // delta inlet-ambient to turn on fans for cooling
 #define FAN_ENABLE_DELTA_T_OFF_COOLING 1.5 // delta inlet-ambient to turn off fans for cooling
+
+#define FAN_OFF_DELAY 10*60 // delay before fans are switched off (heating & cooling)
 
 
 // NTC
@@ -126,8 +126,8 @@
 #define PWR_SW_PIN D5
 #define V_BUS 3.3 // NTC resistor divider input voltage
 
-#define TEMPERATURE_FILTER_COEFF 0.2
-#define SUPPLY_FILTER_COEFF 0.1
+#define TEMPERATURE_FILTER_COEFF 0.1 // 1st order iir filter @ fs = 4 Hz
+#define SUPPLY_FILTER_COEFF 0.1 // 1st order iir filter @ fs = 4 Hz
 
 // initialization
 WiFiClient wificlient_mqtt;
@@ -152,7 +152,7 @@ int mqtt_interval = 5; //mqtt publishing interval in seconds
 void setup() {
   Serial.begin(115200);
 
-  if(STANDALONE_MODE==false){
+  if(STANDALONE_MODE==0){
     // Start networking
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -244,12 +244,11 @@ void loop() {
   handleControl();
 }
 
-
 // handle temperature
 void handleTemperature(void) {
   static unsigned long prev_millis = 0;
 
-  if (InterruptPending(&prev_millis, 100, 1)) {
+  if (InterruptPending(&prev_millis, 250, 1)) {
     int16_t adc0, adc1, adc2, adc3;
     float volts0, volts1, volts2; static float volts3=0.0;
     float R0, R1, R2;
@@ -317,7 +316,7 @@ void handleTemperature(void) {
 }
 
 void handleControl(void) {
-  static unsigned long prev_millis = 0;
+  static unsigned long prev_millis = 0, fan_enabled_prev_millis = 0;
 
   if (InterruptPending(&prev_millis, 1000, 1)) {
     
@@ -330,8 +329,11 @@ void handleControl(void) {
           if (T0 - T1 > FAN_ENABLE_DELTA_T_ON_COOLING) { // inlet lower than ambient, enable fans for cooling
             fan_enable = 1;
             fan_dutycycle = FAN_DUTYCYCLE_COOLING;
+            fan_enabled_prev_millis=millis();
             
-          } else if (T0 - T1 < FAN_ENABLE_DELTA_T_OFF_COOLING) { // inlet higher than ambient, disable fans for cooling cooling
+          } else if ( (T0 - T1 < FAN_ENABLE_DELTA_T_OFF_COOLING) && 
+                      (InterruptPending(&fan_enabled_prev_millis, FAN_OFF_DELAY*1000, 1))
+                      ){ // inlet higher than ambient, disable fans for cooling cooling
             fan_enable = 0;
             fan_dutycycle = 0;
             
@@ -342,7 +344,8 @@ void handleControl(void) {
           if (T1 - T0 > FAN_ENABLE_DELTA_T_ON) { // inlet higher than ambient, enable fans
             fan_enable = 1;
             fan_dutycycle = FAN_DUTYCYCLE_LIMIT * (T1 - FAN_CONTROL_START) / (FAN_CONTROL_FULL - FAN_CONTROL_START);
-    
+            fan_enabled_prev_millis=millis();
+            
             switch (fan_speedmode) {
               default:
               case 0:
@@ -355,7 +358,9 @@ void handleControl(void) {
                 break;
             }
     
-          } else if ((T1 - T0 < FAN_ENABLE_DELTA_T_OFF) || (T1 < FAN_ENABLE_T_OFF)) { // inlet temp is too low, disable fans
+          } else if ( ((T1 - T0 < FAN_ENABLE_DELTA_T_OFF) || (T1 < FAN_ENABLE_T_OFF)) &&
+                      (InterruptPending(&fan_enabled_prev_millis, FAN_OFF_DELAY*1000, 1))
+                      ){ // inlet temp is too low, disable fans
             fan_enable = 0;
             fan_dutycycle = 0;
           }
@@ -512,7 +517,7 @@ bool InterruptPending(unsigned long *prev_millis, unsigned int period, int mode)
   // mode = 0: approximate mode without catch-up
   // mode = 1: exact mode without catch-up
   // mode = 2: exact mode with catch-up
-  // note: overflow is handled correctly and exactly (tested)
+  // note: int overflow is handled properly
 
   if ( (millis() - (*prev_millis) > period) || (millis() - (*prev_millis) < 0)) {
     // trigger detected
