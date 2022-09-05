@@ -21,7 +21,8 @@ Benodigdheden:
 Optioneel, om de "smart home" functies te gebruiken:
 
 6. Een WiFi router
-7. Een MQTT broker/server (e.g. mosquitto op Ubuntu)
+7. Home Assistant op een Raspberry Pi (https://www.home-assistant.io/) met MQTT integratie ingeschakeld -OF- een MQTT broker/server (e.g. mosquitto) met bijvoorbeeld Node Red
+
 
 Montage
 ----------------
