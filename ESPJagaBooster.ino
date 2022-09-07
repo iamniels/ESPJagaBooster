@@ -72,7 +72,7 @@
 ///////// CONFIGURATION ///////// 
 
 // Node
-#define NODE_NAME "radiator-wk-voor" // name of this module - only use small letters and hyphens ('-')
+#define NODE_NAME "radiator-wk-achter" // name of this module - only use small letters and hyphens ('-')
 #define STANDALONE_MODE 0 // if set to 1, the board runs without MQTT. Note: WiFi and over-the-air updates are still active.
 #define SLAVE_MODE 0 // if set to 1, use control input from other node (only works if STANDALONE_MODE=0), module does not need temperature sensors in this mode
 #define MASTER_NODE_NAME "radiator-wk-voor" // when in slave mode, this is the node name of the master
@@ -124,10 +124,10 @@
 #include <Adafruit_ADS1X15.h>
 #include <ArduinoJson.h> // for JSON used with autodiscovery
 
-#define FW_VERSION "1.0.1"
+#define FW_VERSION "1.0.3"
 
 // mqtt
-#define MQTT_INTERVAL 5
+#define MQTT_INTERVAL 10
 
 // NTC
 #define NTC_BETA 3950
@@ -142,7 +142,7 @@
 #define SUPPLY_FILTER_COEFF 0.1 // 1st order iir filter @ fs = 4 Hz
 
 // pwm
-#define FAN_PWM_FREQUENCY 25000 // 25 kHz PWM according to 4-pin fan standard
+#define FAN_PWM_FREQUENCY 10000 // Note: ESP8266 only has interrupt based PWM, so we can't meet the 25 kHz PWM required by 4-pin fan standard (we overflow the interrupt stack if we try this)
 
 // initialization
 WiFiClient wificlient_mqtt;
@@ -165,7 +165,7 @@ int mqtt_reconnects = 0;
 
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
 
   // Start networking
   WiFi.mode(WIFI_STA);
@@ -182,8 +182,8 @@ void setup() {
 
 
   // Init OTA updates
-  ArduinoOTA.setPort(8266);    // Port defaults to 8266
-  ArduinoOTA.setHostname(NODE_NAME);  // Hostname defaults to esp8266-[ChipID]
+  ArduinoOTA.setPort(8266);
+  ArduinoOTA.setHostname(NODE_NAME);
   // ArduinoOTA.setPassword("admin");
   // Password can be set with it's md5 value as well
   // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
@@ -196,8 +196,7 @@ void setup() {
     } else { // U_FS
       type = "filesystem";
     }
-
-    // NOTE: if updating FS this would be the place to unmount FS using FS.end()
+    
     Serial.println("Start updating " + type);
   });
   ArduinoOTA.onEnd([]() {
@@ -544,7 +543,7 @@ void sendHomeAssistantAutodiscoveryMessages(void){
 }
 
 void homeassistantAddSensor(String sensor_name, String unit_measurement, String name_measurement, bool is_controllable, String icon){
-  DynamicJsonDocument doc(1024);
+  DynamicJsonDocument doc(2048);
   
   String topic = String(NODE_NAME) + String("/") + sensor_name;
   String HA_topic;
@@ -582,7 +581,7 @@ void homeassistantAddSensor(String sensor_name, String unit_measurement, String 
 
 
 void homeassistantAddSwitch(String sensor_name, String name_measurement, bool is_controllable, String icon){
-  DynamicJsonDocument doc(1024);
+  DynamicJsonDocument doc(2048);
   
   String topic = String(NODE_NAME) + String("/") + sensor_name;
   String HA_topic;
