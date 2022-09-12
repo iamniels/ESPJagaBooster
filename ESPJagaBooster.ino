@@ -64,7 +64,7 @@
       - NODE_NAME/fan-speed: current fan speed (0 - 100)
 
       - NODE_NAME/temp-inlet: inlet temperature in deg C
-      - NODE_NAME/temp-outlet: outet temperature in deg C
+      - NODE_NAME/temp-outlet: outlet temperature in deg C
       - NODE_NAME/temp-delta-io: delta between inlet and outlet in deg C
       - NODE_NAME/temp-ambient: ambient temperature in deg C
 */
@@ -72,12 +72,13 @@
 ///////// CONFIGURATION ///////// 
 
 // Node
-#define NODE_NAME "radiator-wk-achter" // name of this module - only use small letters and hyphens ('-')
-#define STANDALONE_MODE 0 // if set to 1, the board runs without MQTT. Note: WiFi and over-the-air updates are still active.
-#define SLAVE_MODE 0 // if set to 1, use control input from other node (only works if STANDALONE_MODE=0), module does not need temperature sensors in this mode
+#define NODE_NAME "radiator-wk-achter" // name of this module - only use small letters and hyphens ('-'), no spaces allowed!
+#define STANDALONE_MODE 0 // 0=mqtt enabled, 1=mqtt disabled. Note: WiFi and over-the-air updates are still active.
+#define SLAVE_MODE 0 // 0=use own temperature sensors & control, 1=use control input from other node (only works if STANDALONE_MODE=0 and WIFI_ENABLE=1), module does not need temperature sensors in slave mode
 #define MASTER_NODE_NAME "radiator-wk-voor" // when in slave mode, this is the node name of the master
 
 // WiFi
+#define WIFI_ENABLE 1 // 0=wifi disabled, 1=wifi enabled (disabled = no OTA updates, no MQTT, no Home Assistant)
 #define WIFI_SSID "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
 
@@ -89,12 +90,12 @@
 
 // fan speed controller tuning
 // (heating)
-#define HEATING_LOWER_TEMPERATURE 27.5 // degrees C inlet temperature (start of control range, duty cycle = 0 %)
-#define HEATING_UPPER_TEMPERATURE 45.0 // degrees C inlet temperature (end of control range, duty cycle = HEATING_SPEED_LIMIT %)
+#define HEATING_LOWER_TEMPERATURE 27.5 // degrees C inlet temperature @ start of control range, duty cycle = 0 %
+#define HEATING_UPPER_TEMPERATURE 45.0 // degrees C inlet temperature @ end of control range, duty cycle = HEATING_SPEED_LIMIT %
 #define HEATING_SPEED_LIMIT 60 // max fan speed in normal mode
 #define HEATING_SPEED_BOOST_LIMIT 100 // max fan speed in boost mode
 
-#define HEATING_FAN_ENABLE_TEMPERATURE 27.5 // temperature above which to enable fans
+#define HEATING_FAN_ENABLE_TEMPERATURE 27.5 // degrees C inlet temperature above which to enable fans
 #define HEATING_FAN_ENABLE_DELTA_T_ON 5.0 // temperature difference between inlet and ambient to turn on fans
 #define HEATING_FAN_ENABLE_DELTA_T_OFF 4.0 // temperature difference between inlet and ambient to turn off fans
 
@@ -124,13 +125,10 @@
 #include <Adafruit_ADS1X15.h>
 #include <ArduinoJson.h> // for JSON used with autodiscovery
 
-#define FW_VERSION "1.0.3"
+#define FW_VERSION "1.0.4"
 
 // mqtt
 #define MQTT_INTERVAL 10
-
-// NTC
-#define NTC_BETA 3950
 
 // peripherals and IO
 #define FAN_PIN D0
@@ -156,9 +154,7 @@ int fan_controlmode = 0; // 0 = automatic, 1 = manual
 int fan_enabled = 0;
 int fan_boostmode = 0; // 0 = normal, 1 = boost
 
-float water_in_temperature = 0;
-float water_out_temperature = 0;
-float T0, T1, T2, voltage_comp;
+float T0=-1e3, T1=-1e3, T2=-1e3;
 
 int mqtt_reconnects = 0;
 
@@ -166,68 +162,37 @@ int mqtt_reconnects = 0;
 
 void setup() {
   Serial.begin(9600);
-
-  // Start networking
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  // optional: fixed IP address, it is recommended to assign a fixed IP via the DHCP server instead
-  // IPAddress ip(192,168,1,31); IPAddress gateway(192,168,1,1); IPAddress subnet(255,255,0,0); WiFi.config(ip, gateway, subnet);
-  Serial.print("Attempting to connect to WiFi...");
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    delay(1000);
-  } Serial.println("");
-  Serial.println("Connected");
-  Serial.println("IP address: " + IPAddressString(WiFi.localIP()));
-
-
-  // Init OTA updates
-  ArduinoOTA.setPort(8266);
-  ArduinoOTA.setHostname(NODE_NAME);
-  // ArduinoOTA.setPassword("admin");
-  // Password can be set with it's md5 value as well
-  // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
-  // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
-
-  ArduinoOTA.onStart([]() {
-    String type;
-    if (ArduinoOTA.getCommand() == U_FLASH) {
-      type = "sketch";
-    } else { // U_FS
-      type = "filesystem";
-    }
-    
-    Serial.println("Start updating " + type);
-  });
-  ArduinoOTA.onEnd([]() {
-    Serial.println("\nEnd");
-  });
-  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-  });
-  ArduinoOTA.onError([](ota_error_t error) {
-    Serial.printf("Error[%u]: ", error);
-    if (error == OTA_AUTH_ERROR) {
-      Serial.println("Auth Failed");
-    } else if (error == OTA_BEGIN_ERROR) {
-      Serial.println("Begin Failed");
-    } else if (error == OTA_CONNECT_ERROR) {
-      Serial.println("Connect Failed");
-    } else if (error == OTA_RECEIVE_ERROR) {
-      Serial.println("Receive Failed");
-    } else if (error == OTA_END_ERROR) {
-      Serial.println("End Failed");
-    }
-  });
-  ArduinoOTA.begin();
   
-  if(STANDALONE_MODE==0){
-    // Start MQTT
-    mqttclient.begin(MQTTSERVER, wificlient_mqtt);
-    mqttclient.onMessage(handleMQTTreceive);
-    MQTTconnect();
-  }
+  if(WIFI_ENABLE == 1){    
+    // Start networking
+    WiFi.mode(WIFI_STA);
+    
+    String mac_string=String(WiFi.macAddress());
+    mac_string.replace(":","");
+    WiFi.hostname(String(NODE_NAME).substring(0,23)+String("-")+mac_string.substring(6));
+    
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    // optional: fixed IP address, it is recommended to assign a fixed IP via the DHCP server instead
+    // IPAddress ip(192,168,1,31); IPAddress gateway(192,168,1,1); IPAddress subnet(255,255,0,0); WiFi.config(ip, gateway, subnet);
+    Serial.print("Attempting to connect to WiFi...");
+    while (WiFi.status() != WL_CONNECTED) {
+      Serial.print(".");
+      delay(1000);
+    } Serial.println("");
+    Serial.println("Connected");
+    Serial.println("IP address: " + IPAddressString(WiFi.localIP()));
+  
+  
+    // Init OTA updates
+    initOTA();
 
+    if(STANDALONE_MODE==0){
+      // Start MQTT
+      mqttclient.begin(MQTTSERVER, wificlient_mqtt);
+      mqttclient.onMessage(handleMQTTreceive);
+      MQTTconnect();
+    }  
+  }
   
   // init PWM
   analogWriteRange(100);
@@ -246,15 +211,17 @@ void setup() {
 
 // === Main stuff ====
 void loop() {
-
-  ArduinoOTA.handle();
-
+  if(WIFI_ENABLE==1){
+    ArduinoOTA.handle();
+    
+    if(STANDALONE_MODE==0){
+      handleMQTT();
+    }
+  }
+  
   handleTemperature();
   handleControl();
 
-  if(STANDALONE_MODE==0){
-    handleMQTT();
-  }
 }
 
 // handle temperature
@@ -263,70 +230,58 @@ void handleTemperature(void) {
 
   if (InterruptPending(&prev_millis, 250, 1)) {
     int16_t adc0, adc1, adc2, adc3;
-    float volts0, volts1, volts2; static float volts3=0.0;
-    float R0, R1, R2;
-    float steinhart;
+    static float v_dc_3v3=0.0;
 
     adc0 = ads.readADC_SingleEnded(0);
     adc1 = ads.readADC_SingleEnded(1);
     adc2 = ads.readADC_SingleEnded(2);
     adc3 = ads.readADC_SingleEnded(3);
 
-    volts0 = ads.computeVolts(adc0);
-    volts1 = ads.computeVolts(adc1);
-    volts2 = ads.computeVolts(adc2);
-
-    volts3 = (1 - SUPPLY_FILTER_COEFF) * volts3 + SUPPLY_FILTER_COEFF * (2 * ads.computeVolts(adc3)); // supply voltage (filtered)
-    
-    // R_ntc= R * (V_o/(V_i-V_o))
-    R0 = 10.0e3 * (volts0 / (volts3 - volts0));
-    R1 = 10.0e3 * (volts1 / (volts3 - volts1));
-    R2 = 10.0e3 * (volts2 / (volts3 - volts2));
-
-
-    // T = 1 / ( (1/T_0) + log(R / R_0)*1/beta)
-
-    // AMBIENT
-    if (R0 > 0) {
-      steinhart = R0 / 10e3;
-      steinhart = log(steinhart);
-      steinhart /= NTC_BETA;
-      steinhart += 1.0 / (25 + 273.15);
-      steinhart = 1.0 / steinhart;
-      steinhart -= 273.15;
-      T0 = (1 - TEMPERATURE_FILTER_COEFF) * T0 + TEMPERATURE_FILTER_COEFF * steinhart;
-    } else {
-      T0 = 0;
+    if(v_dc_3v3 < 0.1){ // detect reboot
+      v_dc_3v3 = (2 * ads.computeVolts(adc3)); // initialize value
+    }else{ // value already present, update
+      v_dc_3v3 = (1 - SUPPLY_FILTER_COEFF) * v_dc_3v3 + SUPPLY_FILTER_COEFF * (2 * ads.computeVolts(adc3)); // supply voltage (filtered)
     }
 
-
-    // INLET
-    if (R1 > 0) {
-      steinhart = R1 / 10e3;
-      steinhart = log(steinhart);
-      steinhart /= NTC_BETA;
-      steinhart += 1.0 / (25 + 273.15);
-      steinhart = 1.0 / steinhart;
-      steinhart -= 273.15;
-      T1 = (1 - TEMPERATURE_FILTER_COEFF) * T1 + TEMPERATURE_FILTER_COEFF * steinhart;
-    } else {
-      T1 = 0;
-    }
-
-    // OUTLET
-    if (R2 > 0) {
-      steinhart = R2 / 10e3;
-      steinhart = log(steinhart);
-      steinhart /= NTC_BETA;
-      steinhart += 1.0 / (25 + 273.15);
-      steinhart = 1.0 / steinhart;
-      steinhart -= 273.15;
-      T2 = (1 - TEMPERATURE_FILTER_COEFF) * T2 + TEMPERATURE_FILTER_COEFF * steinhart;
-    } else {
-      T2 = 0;
-    }
+    calculateTemperature(&T0, ads.computeVolts(adc0), v_dc_3v3);
+    calculateTemperature(&T1, ads.computeVolts(adc1), v_dc_3v3);
+    calculateTemperature(&T2, ads.computeVolts(adc2), v_dc_3v3);
   }
 }
+
+void calculateTemperature(float* T, float v_out, float v_in){
+  // calculate temperature with 10k NTC with 10k pull-up from measured voltages v_out and v_in of resistor divider
+  
+  // R_ntc = R_pullup * (V_o/(V_i-V_o))
+  // T_ntc = 1/((log(R_ntc/R_ntc_nominal)/NTC_BETA)+1/(25.0+273.15))-273.15
+  
+  #define NTC_BETA 3950 // NTC beta
+  #define NTC_R_NOMINAL 10.0e3 // NTC resistance at 25 deg C
+  #define NTC_R_PULLUP 10.0e3 // pullup resistance
+
+  float R, steinhart;
+  
+  if(v_out < 0.9*v_in){ // check whether sensor is connected
+    R = NTC_R_PULLUP * (v_out / (v_in - v_out));
+    
+    steinhart = R / NTC_R_NOMINAL;
+    steinhart = log(steinhart);
+    steinhart /= NTC_BETA;
+    steinhart += 1.0 / (25.0 + 273.15);
+    steinhart = 1.0 / steinhart;
+    steinhart -= 273.15;
+
+    if(steinhart > (*T + 100)){ // detect re-connection of temperature sensor, initialize
+      *T = steinhart;
+    }else{
+      *T = (1 - TEMPERATURE_FILTER_COEFF) * (*T) + TEMPERATURE_FILTER_COEFF * steinhart;
+    }
+    
+  } else {
+    *T = -1e3; // sensor is not connected, invalid reading
+  }
+}
+
 
 void handleControl(void) {
   static unsigned long prev_millis = 0, fan_enabled_prev_millis = 0;
@@ -335,7 +290,12 @@ void handleControl(void) {
     
     if (((SLAVE_MODE == 0)&&(fan_controlmode == 0)) || (STANDALONE_MODE == 1)){
       // automatic fan speed
-
+      
+      if(T1 < -100 || T2 < -100){
+        // temperature sensors are not connected, can't use automatic control mode
+        return;
+      }
+      
       if(T0 > T1){ // we could be cooling
       
         if (T0 - T1 > COOLING_FAN_ENABLE_DELTA_T_ON) { // inlet lower than ambient, enable fans for cooling
@@ -396,13 +356,7 @@ void handleControl(void) {
     }
 
 
-    if (fan_speed > 100)
-      fan_speed = 100;
-    if (fan_speed < 0)
-      fan_speed = 0;
-
-    analogWrite(FAN_PIN, 100-fan_speed);
-    digitalWrite(PWR_SW_PIN, fan_enabled);
+    writeFanSpeed();
   }
 }
 
@@ -438,11 +392,29 @@ void handleMQTT(void) {
       mqttclient.publish(GetTopic("fan-boostmode"), String(fan_boostmode));
       mqttclient.publish(GetTopic("fan-enabled"), String(fan_enabled));
 
-      mqttclient.publish(GetTopic("temp-inlet"), String(T1, 2));
-      mqttclient.publish(GetTopic("temp-outlet"), String(T2, 2));
-      mqttclient.publish(GetTopic("temp-delta-io"), String(T1 - T2, 2));
+      if(T1 > -100.0){
+        mqttclient.publish(GetTopic("temp-inlet"), String(T1, 2));
+      }else{
+        mqttclient.publish(GetTopic("temp-inlet"), String("-"));        
+      }
 
-      mqttclient.publish(GetTopic("temp-ambient"), String(T0, 2));
+      if(T2 > -100.0){
+        mqttclient.publish(GetTopic("temp-outlet"), String(T2, 2));
+      }else{
+        mqttclient.publish(GetTopic("temp-outlet"), String("-"));        
+      }
+      
+      if((T1 > -100.0)&&(T2 > -100.0)){
+        mqttclient.publish(GetTopic("temp-delta-io"), String(T1 - T2, 2));
+      }else{
+        mqttclient.publish(GetTopic("temp-delta-io"), String("-"));
+      }        
+      
+      if(T0 > -100.0){
+        mqttclient.publish(GetTopic("temp-ambient"), String(T0, 2));
+      }else{
+        mqttclient.publish(GetTopic("temp-ambient"), String("-"));        
+      }
 
       if(ENABLE_HOME_ASSISTANT_AUTODISCOVERY==1){
         sendHomeAssistantAutodiscoveryMessages();
@@ -474,9 +446,8 @@ void MQTTconnect(void) {
       mqttclient.subscribe(GetTopic("fan-controlmode-ref"));
       mqttclient.subscribe(GetTopic("fan-boostmode-ref")); 
               
-      if(SLAVE_MODE == 1){
+      if((SLAVE_MODE == 1)&&(strcmp(NODE_NAME,MASTER_NODE_NAME) !=0 )){
         mqttclient.subscribe(GetTopicMaster("fan-speed"));
-        mqttclient.subscribe(GetTopicMaster("fan-boostmode"));
         mqttclient.subscribe(GetTopicMaster("fan-enabled"));
       }
 
@@ -489,10 +460,9 @@ void MQTTconnect(void) {
 
 // handle received MQTT messages
 void handleMQTTreceive(String &topic, String &payload) {
-
-  if (topic.indexOf(GetTopic("fan-speed-ref")) >= 0) {
-    fan_speed = payload.toInt();
-    mqttclient.publish(GetTopic("fan-speed"), String(fan_speed));
+  if (topic.indexOf(GetTopic("fan-boostmode-ref")) >= 0) {
+    fan_boostmode = payload.toInt();
+    mqttclient.publish(GetTopic("fan-boostmode"), String(fan_boostmode));
   }
 
   if (topic.indexOf(GetTopic("fan-controlmode-ref")) >= 0) {
@@ -500,23 +470,21 @@ void handleMQTTreceive(String &topic, String &payload) {
     mqttclient.publish(GetTopic("fan-controlmode"), String(fan_controlmode));
   }
 
-  if (topic.indexOf(GetTopic("fan-boostmode-ref")) >= 0) {
-    fan_boostmode = payload.toInt();
-    mqttclient.publish(GetTopic("fan-boostmode"), String(fan_boostmode));
-  }
+  if(fan_controlmode == 1){ // manual mode, accept updates of setpoints
+    if (topic.indexOf(GetTopic("fan-speed-ref")) >= 0) {
+      fan_speed = payload.toInt();
+      writeFanSpeed();
+      mqttclient.publish(GetTopic("fan-speed"), String(fan_speed));
+    }    
+  
+  }else if((SLAVE_MODE == 1)&&(fan_controlmode == 0)){ // automatic control mode, listen to the master
 
-    
-  if((SLAVE_MODE == 1)&&(fan_controlmode == 0)){ // when using automatic control mode, listen to the master
     if (topic.indexOf(GetTopicMaster("fan-speed")) >= 0) {
       fan_speed = payload.toInt();
+      writeFanSpeed();
       mqttclient.publish(GetTopic("fan-speed"), String(fan_speed));
     }
-  
-    if (topic.indexOf(GetTopicMaster("fan-boostmode")) >= 0) {
-      fan_boostmode = payload.toInt();
-      mqttclient.publish(GetTopic("fan-boostmode"), String(fan_boostmode));
-    }    
-
+    
     if (topic.indexOf(GetTopicMaster("fan-enabled")) >= 0) {
       fan_enabled = payload.toInt();
       mqttclient.publish(GetTopic("fan-enabled"), String(fan_enabled));
@@ -540,6 +508,7 @@ void sendHomeAssistantAutodiscoveryMessages(void){
   homeassistantAddSensor("temp-ambient", "°C", "Ambient temperature", false, "mdi:home-thermometer-outline");
 
   homeassistantAddSensor("rssi", "dB", "WiFi signal strength", false, "mdi:wifi");
+  homeassistantAddSensor("ip", "", "IP address", false, "mdi:map-marker");
 }
 
 void homeassistantAddSensor(String sensor_name, String unit_measurement, String name_measurement, bool is_controllable, String icon){
@@ -622,6 +591,56 @@ void homeassistantAddSwitch(String sensor_name, String name_measurement, bool is
 }
 
 
+void initOTA(void){
+  ArduinoOTA.setPort(8266);
+  ArduinoOTA.setHostname(NODE_NAME);
+  // ArduinoOTA.setPassword("admin");
+  // Password can be set with it's md5 value as well
+  // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
+  // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
+
+  ArduinoOTA.onStart([]() {
+    String type;
+    if (ArduinoOTA.getCommand() == U_FLASH) {
+      type = "sketch";
+    } else { // U_FS
+      type = "filesystem";
+    }
+    
+    Serial.println("Start updating " + type);
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nEnd");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) {
+      Serial.println("Auth Failed");
+    } else if (error == OTA_BEGIN_ERROR) {
+      Serial.println("Begin Failed");
+    } else if (error == OTA_CONNECT_ERROR) {
+      Serial.println("Connect Failed");
+    } else if (error == OTA_RECEIVE_ERROR) {
+      Serial.println("Receive Failed");
+    } else if (error == OTA_END_ERROR) {
+      Serial.println("End Failed");
+    }
+  });
+  ArduinoOTA.begin();
+}
+
+void writeFanSpeed(void){
+  if(fan_speed > 100)
+    fan_speed = 100;
+  if(fan_speed < 0)
+    fan_speed = 0;
+
+  analogWrite(FAN_PIN, 100-fan_speed);
+  digitalWrite(PWR_SW_PIN, fan_enabled);
+}
 
 // ===== Helper functions =====
 String IPAddressString(IPAddress address) {
