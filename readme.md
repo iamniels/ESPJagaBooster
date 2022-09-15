@@ -24,6 +24,12 @@ Optioneel, om de "smart home" functies te gebruiken:
 7. Home Assistant op een Raspberry Pi (https://www.home-assistant.io/) met MQTT integratie ingeschakeld -OF- een MQTT broker/server (e.g. mosquitto) met bijvoorbeeld Node Red
 
 
+Software download
+----------------
+- Arduino IDE: https://downloads.arduino.cc/arduino-1.8.19-windows.exe
+
+
+
 Montage
 ----------------
 
