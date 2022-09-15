@@ -23,6 +23,8 @@
    
    
    === compiling ===
+   NOTE: These instructions are applicable for Arduino IDE 1.8.x only! The new IDE has a different workflow.
+   
    1) Add D1 mini to the board manager:
    File --> Preferences, add to board manager URLs: http://arduino.esp8266.com/stable/package_esp8266com_index.json
    
