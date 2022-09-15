@@ -164,7 +164,8 @@ int mqtt_reconnects = 0;
 
 void setup() {
   Serial.begin(9600);
-  
+  Serial.println("ESPJagaBooster starting...");
+
   if(WIFI_ENABLE == 1){    
     // Start networking
     WiFi.mode(WIFI_STA);
@@ -208,6 +209,8 @@ void setup() {
   // enable fans
   pinMode(PWR_SW_PIN, OUTPUT);
   digitalWrite(PWR_SW_PIN, LOW);
+   
+  Serial.println("Done. Fan control algorithm operational.");
 }
 
 
@@ -248,6 +251,7 @@ void handleTemperature(void) {
     calculateTemperature(&T0, ads.computeVolts(adc0), v_dc_3v3);
     calculateTemperature(&T1, ads.computeVolts(adc1), v_dc_3v3);
     calculateTemperature(&T2, ads.computeVolts(adc2), v_dc_3v3);
+    
   }
 }
 
@@ -289,7 +293,7 @@ void handleControl(void) {
   static unsigned long prev_millis = 0, fan_enabled_prev_millis = 0;
 
   if (InterruptPending(&prev_millis, 1000, 1)) {
-    
+
     if (((SLAVE_MODE == 0)&&(fan_controlmode == 0)) || (STANDALONE_MODE == 1)){
       // automatic fan speed
       
@@ -359,6 +363,9 @@ void handleControl(void) {
 
 
     writeFanSpeed();
+
+    Serial.println("Fan speed updated.");
+     
   }
 }
 
