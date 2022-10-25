@@ -100,8 +100,8 @@
 
 // WiFi
 #define WIFI_ENABLE 1 // 0=wifi disabled, 1=wifi enabled (disabled = no OTA updates, no MQTT, no Home Assistant)
-#define WIFI_SSID "***REMOVED***"
-#define WIFI_PASSWORD "***REMOVED***"
+#define WIFI_SSID "WIFI_SSID"
+#define WIFI_PASSWORD "WIFI_PASSWORD"
 
 // MQTT
 #define MQTTSERVER "192.168.1.11"
