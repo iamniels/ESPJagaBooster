@@ -124,8 +124,8 @@
 #define COOLING_SPEED 55 // fan speed in cooling mode (cooling uses a constant fan speed)
 #define COOLING_SPEED_BOOST 100 // fan speed in boost cooling mode (cooling uses a constant fan speed)
 
-#define COOLING_FAN_ENABLE_DELTA_T_ON 2.5 // temperature difference between inlet and ambient to turn on fans for cooling
-#define COOLING_FAN_ENABLE_DELTA_T_OFF 1.5 // temperature difference between inlet and ambient to turn off fans for cooling
+#define COOLING_FAN_ENABLE_DELTA_T_ON 4.0 // temperature difference between inlet and ambient to turn on fans for cooling
+#define COOLING_FAN_ENABLE_DELTA_T_OFF 2.5 // temperature difference between inlet and ambient to turn off fans for cooling
 
 #define FAN_OFF_DELAY 600 // delay before fans are switched off in seconds (heating & cooling)
 
