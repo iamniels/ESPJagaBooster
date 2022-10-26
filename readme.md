@@ -2,9 +2,12 @@ This code is meant for equipping standard ("Jaga") radiators with fans, and cont
 
 ----
 
-Voor de Nederlanders zijn bijpassende modules hier verkrijgbaar: https://link.marktplaats.nl/m1871961388
+Voor Nederlanders/Belgen zijn bijpassende modules hier verkrijgbaar: https://www.sdr-engineering.nl/webshop/
 
 ----
+
+Let op: deze firmware is alleen geschikt voor de ESP8266-versie van de modules (modules R04 en ouder)!
+
 
 Beknopte handleiding
 ================
