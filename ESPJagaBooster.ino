@@ -93,15 +93,15 @@
 ///////// CONFIGURATION ///////// 
 
 // Node
-#define NODE_NAME "radiator-wk-voor" // name of this module - only use small letters and hyphens ('-'), no spaces allowed!
+#define NODE_NAME "radiator-hal" // name of this module - only use small letters and hyphens ('-'), no spaces allowed!
 #define STANDALONE_MODE 0 // 0=mqtt enabled, 1=mqtt disabled. Note: WiFi and over-the-air updates are still active.
-#define SLAVE_MODE 0 // 0=use own temperature sensors & control, 1=use control input from other node (only works if STANDALONE_MODE=0 and WIFI_ENABLE=1), module does not need temperature sensors in slave mode
+#define SLAVE_MODE 1 // 0=use own temperature sensors & control, 1=use control input from other node (only works if STANDALONE_MODE=0 and WIFI_ENABLE=1), module does not need temperature sensors in slave mode
 #define MASTER_NODE_NAME "radiator-wk-voor" // when in slave mode, this is the node name of the master
 
 // WiFi
 #define WIFI_ENABLE 1 // 0=wifi disabled, 1=wifi enabled (disabled = no OTA updates, no MQTT, no Home Assistant)
-#define WIFI_SSID "WIFI_SSID"
-#define WIFI_PASSWORD "WIFI_PASSWORD"
+#define WIFI_SSID "YOUR_WIFI_SSID"
+#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
 
 // MQTT
 #define MQTTSERVER "192.168.1.11"
@@ -124,8 +124,8 @@
 #define COOLING_SPEED 55 // fan speed in cooling mode (cooling uses a constant fan speed)
 #define COOLING_SPEED_BOOST 100 // fan speed in boost cooling mode (cooling uses a constant fan speed)
 
-#define COOLING_FAN_ENABLE_DELTA_T_ON 4.0 // temperature difference between inlet and ambient to turn on fans for cooling
-#define COOLING_FAN_ENABLE_DELTA_T_OFF 2.5 // temperature difference between inlet and ambient to turn off fans for cooling
+#define COOLING_FAN_ENABLE_DELTA_T_ON 2.5 // temperature difference between inlet and ambient to turn on fans for cooling
+#define COOLING_FAN_ENABLE_DELTA_T_OFF 1.5 // temperature difference between inlet and ambient to turn off fans for cooling
 
 #define FAN_OFF_DELAY 600 // delay before fans are switched off in seconds (heating & cooling)
 
@@ -146,7 +146,7 @@
 #include <Adafruit_ADS1X15.h>
 #include <ArduinoJson.h> // for JSON used with autodiscovery
 
-#define FW_VERSION "1.1.0"
+#define FW_VERSION "1.1.1"
 
 // mqtt
 #define MQTT_INTERVAL 10
@@ -164,6 +164,8 @@
 #define FAN_PIN D0
 #define FAN_POWER_PIN D5
 
+// LED
+#define LED_PIN D4
 
 // initialization
 WiFiClient wificlient_mqtt;
@@ -187,9 +189,8 @@ String node_hostname = "";
 
 
 void setup() {
+  initLed();
    
-  status_led=3; // status led blinks fast
-    
   Serial.begin(115200);
   delay(1000);
   Serial.println("ESPJagaBooster starting...");
@@ -202,7 +203,6 @@ void setup() {
   if(WIFI_ENABLE == 1){    
     // Start networking
     initWiFi();
-  
     // Init OTA updates
     initOTA();
 
@@ -227,7 +227,6 @@ void setup() {
   Serial.println("Done. Fan control algorithm operational.");  
 
   status_led=1; // status led on
-  
 }
 
 
@@ -246,7 +245,7 @@ void loop() {
   
   handleTemperature();
   handleControl();
-
+  handleLed();
 }
 
 
@@ -421,23 +420,21 @@ void initWiFi(void){
   node_hostname = String(NODE_NAME).substring(0,23)+String("-")+mac_string.substring(6);
   
   WiFi.hostname(node_hostname.c_str());
-  
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
       
   // optional: fixed IP address, it is recommended to assign a fixed IP via the DHCP server instead
   // IPAddress ip(192,168,1,31); IPAddress gateway(192,168,1,1); IPAddress subnet(255,255,0,0); WiFi.config(ip, gateway, subnet);
   Serial.print("Attempting to connect to WiFi...");
   int seconds=0;
-  while ((WiFi.status() != WL_CONNECTED)&&(seconds < 10)) {
+  while ((WiFi.status() != WL_CONNECTED)&&(seconds < 5)) {
     Serial.print(".");        
     delay(1000);
     seconds++;    
   }Serial.println();
   
   if(WiFi.status() != WL_CONNECTED) { 
-    WiFireconnect(); // blocking function that continues to attempt connecting
+    Serial.println("Could not connect. Will keep trying.");
   }else{
-    
     Serial.println("Connected");
     Serial.println("IP address: " + IPAddressString(WiFi.localIP()));
   }
@@ -445,25 +442,12 @@ void initWiFi(void){
 
 // WiFi reconnect
 void WiFireconnect(void){
-  while (WiFi.status() != WL_CONNECTED) {
-    status_led = 3; // status led blinks fast
-    Serial.print("WiFi is not available. Attempting to reconnect...");
+  if(WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi is not available. Attempting to reconnect...");
     
     WiFi.disconnect();
-    WiFi.reconnect();
-    
-    int seconds=0;
-    while ((WiFi.status() != WL_CONNECTED)&&(seconds < 10)) {
-      Serial.print(".");        
-      delay(1000);   
-      seconds++; 
-    }Serial.println();
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   }
-  
-  Serial.println("Connected");
-  Serial.println("IP address: " + IPAddressString(WiFi.localIP()));
-
-  status_led = 1; // we're connected again, set status led on
 }
 
 
@@ -474,7 +458,6 @@ void WiFireconnect(void){
 // connect and subscribe
 void MQTTconnect(void) {
   if ((!mqttclient.connected())) {
-    status_led = 3; // status led blinks fast
     Serial.println("Attempting MQTT connection...");
 
     // Attempt to connect
@@ -486,7 +469,6 @@ void MQTTconnect(void) {
     }
 
     if (retVal) {
-      status_led = 1; // status led on
       Serial.println("Connected");
       mqttclient.publish(GetTopic("ip"), IPAddressString(WiFi.localIP()));
       
@@ -508,40 +490,48 @@ void MQTTconnect(void) {
 
 // handle connection and send messages at intervals
 void handleMQTT(void) {
-  static unsigned long prev_millis_mqtt = 0, prev_millis_autodiscovery = 0;
-
-  if((WiFi.status() != WL_CONNECTED)){
-    WiFireconnect();
-  }
+  static unsigned long prev_millis_mqtt = 0, prev_millis_mqttloop = 0;
   
-  if (!mqttclient.connected()) {
-    MQTTconnect();
-  } else {
-    mqttclient.loop();
-    delay(10); // needed according to MQTT library documentation
-    
-    if (InterruptPending(&prev_millis_mqtt, MQTT_INTERVAL * 1000, 1)) {
+  if (InterruptPending(&prev_millis_mqttloop, 100, 1)) {
+    if (mqttclient.connected()){
+      mqttclient.loop();
+      delay(10); // needed according to MQTT library documentation
+    }
+  }
+
+  if (InterruptPending(&prev_millis_mqtt, MQTT_INTERVAL * 1000, 1)) {
+    if(WiFi.status() != WL_CONNECTED) {
+      status_led = 3; // status led blinks fast
+      WiFireconnect();
+      
+    }else if (!mqttclient.connected()) {
+      status_led = 3; // status led blinks fast
+      MQTTconnect();
+      
+    } else {
+      status_led = 1; // status OK
+      
       Serial.println("Sending MQTT update");
       mqttclient.publish(GetTopic("ip"), IPAddressString(WiFi.localIP()));
       mqttclient.publish(GetTopic("ssid"), WiFi.SSID());
       mqttclient.publish(GetTopic("rssi"), String(WiFi.RSSI()));
-
+    
       mqttclient.publish(GetTopic("interval"), String(MQTT_INTERVAL));
       mqttclient.publish(GetTopic("firmware"), String(FW_VERSION));
       mqttclient.publish(GetTopic("runtime"), String(millis() / 1000));
       mqttclient.publish(GetTopic("reconnects"), String(mqtt_reconnects));
-
+    
       mqttclient.publish(GetTopic("fan-speed"), String(fan_speed));
       mqttclient.publish(GetTopic("fan-controlmode"), String(fan_controlmode));
       mqttclient.publish(GetTopic("fan-boostmode"), String(fan_boostmode));
       mqttclient.publish(GetTopic("fan-enabled"), String(fan_enabled));
-
+    
       if(T1 > -100.0){
         mqttclient.publish(GetTopic("temp-inlet"), String(T1, 2));
       }else{
         mqttclient.publish(GetTopic("temp-inlet"), String("-"));        
       }
-
+    
       if(T2 > -100.0){
         mqttclient.publish(GetTopic("temp-outlet"), String(T2, 2));
       }else{
@@ -559,11 +549,10 @@ void handleMQTT(void) {
       }else{
         mqttclient.publish(GetTopic("temp-ambient"), String("-"));        
       }
-
+    
       if(ENABLE_HOME_ASSISTANT_AUTODISCOVERY==1){
         sendHomeAssistantAutodiscoveryMessages();
       }
-      
     }
   }
 }
@@ -770,6 +759,61 @@ void writeFanSpeed(void){
 }
 
 
+// =====================================
+// =============== LED =================
+// =====================================
+void initLed(void){
+  // init LED
+  pinMode(LED_PIN, OUTPUT);      
+}
+
+// LED blink routine, running as seperate task
+void handleLed(void){
+  static unsigned long prev_millis=0;
+  static int led_enabled=0;
+
+  switch(status_led){
+    case 0: // led off
+      digitalWrite(LED_PIN, 1); // led off
+      led_enabled = 0;
+      prev_millis = millis();
+      break;
+      
+    case 1: // led on
+      digitalWrite(LED_PIN, 0); // led on
+      led_enabled = 1;
+      prev_millis = millis();
+      break;
+
+    case 2: // led blink slow
+      if(InterruptPending(&prev_millis, 2000, 1)){
+        prev_millis = millis();
+        
+        if(led_enabled == 0){
+          digitalWrite(LED_PIN, 0); // led on
+          led_enabled = 1;
+        }else{
+          digitalWrite(LED_PIN, 1); // led off
+          led_enabled = 0;
+        }       
+      }
+      break;
+      
+    case 3: // led blink fast
+      if(InterruptPending(&prev_millis, 100, 1)){
+        prev_millis = millis();
+        
+        if(led_enabled == 0){
+          digitalWrite(LED_PIN, 0); // led on
+          led_enabled = 1;
+        }else{
+          digitalWrite(LED_PIN, 1); // led off
+          led_enabled = 0;
+        }        
+      }
+      break;
+  }
+}
 
 // =====================================
 // ========= Helper functions ==========
