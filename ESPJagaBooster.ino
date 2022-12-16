@@ -93,7 +93,7 @@
 ///////// CONFIGURATION ///////// 
 
 // Node
-#define NODE_NAME "radiator-hal" // name of this module - only use small letters and hyphens ('-'), no spaces allowed!
+#define NODE_NAME "radiator-wk-achter" // name of this module - only use small letters and hyphens ('-'), no spaces allowed!
 #define STANDALONE_MODE 0 // 0=mqtt enabled, 1=mqtt disabled. Note: WiFi and over-the-air updates are still active.
 #define SLAVE_MODE 1 // 0=use own temperature sensors & control, 1=use control input from other node (only works if STANDALONE_MODE=0 and WIFI_ENABLE=1), module does not need temperature sensors in slave mode
 #define MASTER_NODE_NAME "radiator-wk-voor" // when in slave mode, this is the node name of the master
@@ -225,8 +225,6 @@ void setup() {
   digitalWrite(FAN_POWER_PIN, LOW);
   
   Serial.println("Done. Fan control algorithm operational.");  
-
-  status_led=1; // status led on
 }
 
 
@@ -245,7 +243,8 @@ void loop() {
   
   handleTemperature();
   handleControl();
-  handleLed();
+
+  ledTask();
 }
 
 
@@ -509,7 +508,7 @@ void handleMQTT(void) {
       MQTTconnect();
       
     } else {
-      status_led = 1; // status OK
+      status_led = 0; // status OK, LED is off
       
       Serial.println("Sending MQTT update");
       mqttclient.publish(GetTopic("ip"), IPAddressString(WiFi.localIP()));
@@ -765,10 +764,12 @@ void writeFanSpeed(void){
 void initLed(void){
   // init LED
   pinMode(LED_PIN, OUTPUT);      
+  status_led=1; // status led on
+  digitalWrite(LED_PIN, 0); // led on
 }
 
 // LED blink routine, running as seperate task
-void handleLed(void){
+void ledTask(void){
   static unsigned long prev_millis=0;
   static int led_enabled=0;
 
